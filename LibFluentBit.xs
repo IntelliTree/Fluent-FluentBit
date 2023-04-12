@@ -15,6 +15,8 @@ static SV *newSVivpv(IV ival, const char *pval) {
 }
 #endif
 
+#define TRACE warn
+
 MODULE = Fluent::LibFluentBit              PACKAGE = Fluent::LibFluentBit
 
 flb_ctx_t*
@@ -26,20 +28,18 @@ flb_service_set(ctx, ...)
    INIT:
       int i= 1;
       const char *k_str, *v_str;
-      int success= 1;
 	CODE:
       // final argmuent either must not exist or be undef
-      if ((items-1) & 1) {
-         if (SvOK(ST(items-1)))
-            croak("Arguments must be even-length (key,value) list optionally followed by undef");
-      }
+      if (items < i+2 || (((items-i) & 1) && SvOK(ST(items-i))))
+         croak("Arguments must be even-length (key,value) list optionally followed by undef");
 		while (i+1 < items) {
          k_str= SvPV_nolen(ST(i));
          v_str= SvPV_nolen(ST(i+1));
-         success= flb_service_set(ctx, k_str, v_str, NULL) >= 0 && success;
+         TRACE("flb_service_set(%p, %s, %s, NULL)", ctx, k_str, v_str);
+         if ((RETVAL= flb_service_set(ctx, k_str, v_str, NULL)) < 0)
+            break;
          i+= 2;
       }
-      RETVAL= success;
 	OUTPUT:
 		RETVAL
 
@@ -52,6 +52,7 @@ flb_input(ctx, name, data_sv=NULL)
       void *data= data_sv && SvOK(data_sv)? (void*)SvIV(data_sv) : NULL;
    CODE:
       RETVAL= flb_input(ctx, name, data);
+      TRACE("flb_input(%p, %s, %p) = %d", ctx, name, data, RETVAL);
    OUTPUT:
       RETVAL
 
@@ -62,20 +63,18 @@ flb_input_set(ctx, in_ffd, ...)
    INIT:
       int i= 2;
       const char *k_str, *v_str;
-      int success= 1;
    CODE:
       // final argmuent either must not exist or be undef
-      if ((items-2) & 1) {
-         if (SvOK(ST(items-1)))
-            croak("Arguments must be even-length (key,value) list optionally followed by undef");
-      }
+      if (items < i+2 || (((items-i) & 1) && SvOK(ST(items-i))))
+         croak("Arguments must be even-length (key,value) list optionally followed by undef");
 		while (i+1 < items) {
          k_str= SvPV_nolen(ST(i));
          v_str= SvPV_nolen(ST(i+1));
-         success= flb_input_set(ctx, in_ffd, k_str, v_str, NULL) >= 0 && success;
+         TRACE("flb_input_set(%p, %d, %s, %s, NULL)", ctx, in_ffd, k_str, v_str);
+         if ((RETVAL= flb_input_set(ctx, in_ffd, k_str, v_str, NULL)) < 0)
+            break;
          i+= 2;
       }
-      RETVAL= success;
 	OUTPUT:
 		RETVAL
 
@@ -98,20 +97,18 @@ flb_filter_set(ctx, flt_ffd, ...)
    INIT:
       int i= 2;
       const char *k_str, *v_str;
-      int success= 1;
    CODE:
       // final argmuent either must not exist or be undef
-      if ((items-2) & 1) {
-         if (SvOK(ST(items-1)))
-            croak("Arguments must be even-length (key,value) list optionally followed by undef");
-      }
+      if (items < i+2 || (((items-i) & 1) && SvOK(ST(items-i))))
+         croak("Arguments must be even-length (key,value) list optionally followed by undef");
 		while (i+1 < items) {
          k_str= SvPV_nolen(ST(i));
          v_str= SvPV_nolen(ST(i+1));
-         success= flb_filter_set(ctx, flt_ffd, k_str, v_str, NULL) >= 0 && success;
+         TRACE("flb_filter_set(%p, %d, %s, %s, NULL)", ctx, flt_ffd, k_str, v_str);
+         if ((RETVAL= flb_filter_set(ctx, flt_ffd, k_str, v_str, NULL)) < 0)
+            break;
          i+= 2;
       }
-      RETVAL= success;
 	OUTPUT:
 		RETVAL
 
@@ -124,6 +121,7 @@ flb_output(ctx, name, data_sv=NULL)
       void *data= data_sv && SvOK(data_sv)? (void*)SvIV(data_sv) : NULL;
    CODE:
       RETVAL= flb_output(ctx, name, data);
+      TRACE("flb_output(%p, %s, %p)= %d", ctx, name, data, RETVAL);
    OUTPUT:
       RETVAL
 
@@ -134,20 +132,18 @@ flb_output_set(ctx, out_ffd, ...)
    INIT:
       int i= 2;
       const char *k_str, *v_str;
-      int success= 1;
    CODE:
       // final argmuent either must not exist or be undef
-      if ((items-2) & 1) {
-         if (SvOK(ST(items-1)))
-            croak("Arguments must be even-length (key,value) list optionally followed by undef");
-      }
+      if (items < i+2 || (((items-i) & 1) && SvOK(ST(items-i))))
+         croak("Arguments must be even-length (key,value) list optionally followed by undef");
 		while (i+1 < items) {
          k_str= SvPV_nolen(ST(i));
          v_str= SvPV_nolen(ST(i+1));
-         success= flb_output_set(ctx, out_ffd, k_str, v_str, NULL) >= 0 && success;
+         TRACE("flb_output_set(%p, %d, %s, %s, NULL)", ctx, out_ffd, k_str, v_str);
+         if ((RETVAL= flb_output_set(ctx, out_ffd, k_str, v_str, NULL)) < 0)
+            break;
          i+= 2;
       }
-      RETVAL= success;
 	OUTPUT:
 		RETVAL
 
@@ -180,6 +176,7 @@ flb_lib_push(ctx, in_ffd, data_sv, len_sv=NULL)
       size_t len;
       const char *data= SvPV(data_sv, len);
    CODE:
+      warn("flb_lib_push %p %d %p %d data_sv=%p", ctx, in_ffd, data, len, data_sv);
       // Use the shorter of the user-supplied length or the actual string length
       if (len_sv && SvIV(len_sv) < len)
          len= SvIV(len_sv);
