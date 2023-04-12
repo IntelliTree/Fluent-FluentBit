@@ -8,8 +8,9 @@
 #ifndef newSVivpv
 static SV *newSVivpv(IV ival, const char *pval) {
    SV *s= newSVpv(pval, 0);
-   SvIOK_on(s);
+   SvUPGRADE(s, SVt_PVIV);
    SvIV_set(s, ival);
+   SvIOK_on(s);
    return s;
 }
 #endif
@@ -43,10 +44,16 @@ flb_service_set(ctx, ...)
 		RETVAL
 
 int
-flb_input(ctx, name, data=NULL)
+flb_input(ctx, name, data_sv=NULL)
    flb_ctx_t *ctx
    const char *name
-   void *data
+   SV *data_sv
+   INIT:
+      void *data= data_sv && SvOK(data_sv)? (void*)SvIV(data_sv) : NULL;
+   CODE:
+      RETVAL= flb_input(ctx, name, data);
+   OUTPUT:
+      RETVAL
 
 int
 flb_input_set(ctx, in_ffd, ...)
@@ -73,10 +80,16 @@ flb_input_set(ctx, in_ffd, ...)
 		RETVAL
 
 int
-flb_filter(ctx, name, data=NULL)
+flb_filter(ctx, name, data_sv=NULL)
    flb_ctx_t *ctx
    const char *name
-   void *data
+   SV *data_sv
+   INIT:
+      void *data= data_sv && SvOK(data_sv)? (void*)SvIV(data_sv) : NULL;
+   CODE:
+      RETVAL= flb_filter(ctx, name, data);
+   OUTPUT:
+      RETVAL
 
 int
 flb_filter_set(ctx, flt_ffd, ...)
@@ -103,10 +116,16 @@ flb_filter_set(ctx, flt_ffd, ...)
 		RETVAL
 
 int
-flb_output(ctx, name, data=NULL)
+flb_output(ctx, name, data_sv=NULL)
    flb_ctx_t *ctx
    const char *name
-   void *data
+   SV *data_sv
+   INIT:
+      void *data= data_sv && SvOK(data_sv)? (void*)SvIV(data_sv) : NULL;
+   CODE:
+      RETVAL= flb_output(ctx, name, data);
+   OUTPUT:
+      RETVAL
 
 int
 flb_output_set(ctx, out_ffd, ...)
@@ -148,7 +167,7 @@ flb_destroy(obj)
    CODE:
       if (ctx) {
          flb_destroy(ctx);
-         PerlFluentBit_set_ctx_mg(obj, NULL); // unset magic so that can't be called twice
+         PerlFluentBit_set_ctx_mg(obj, NULL);
       }
 
 int
