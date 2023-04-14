@@ -1,17 +1,17 @@
 use strict;
 use warnings;
 use Test::More;
+use Time::HiRes qw( sleep time );
 use Fluent::LibFluentBit;
 
 plan skip_all => 'Require DATADOG_API_KEY for this test'
    unless defined $ENV{DATADOG_API_KEY};
 
-ok( my $flb= Fluent::LibFluentBit->default_instance, 'default_instance' );
+my $flb= Fluent::LibFluentBit->default_instance;
+$flb->configure(log_level => $ENV{DEBUG}? 'trace' : 'debug');
 
-$flb->flb_service_set('log_level', 'trace');
-
-my $out= $flb->flb_output("datadog");
-$flb->flb_output_set($out,
+my $id= $flb->flb_output("datadog");
+$flb->flb_output_set($id,
    Match => '*',
    Host => "http-intake.logs.datadoghq.com",
    TLS => 'on',
@@ -21,16 +21,24 @@ $flb->flb_output_set($out,
    dd_source => 'perl-Fluent-LibFluentBit',
 );
 
-my $in= $flb->flb_input("lib");
+my $in= $flb->add_input("lib");
 $flb->start;
-for my $i (0..100) {
-   $flb->flb_lib_push($in, sprintf("[%d,{\"key1\":\"%ld\"}]", time, $i));
-   sleep 1;
+for my $i (0..5) {
+   $flb->flb_lib_push($in->id, sprintf("[%.2f,{\"key1\":\"%ld\"}]", time, $i));
+   sleep .2;
 }
 
-#ok( my $logger= $flb->new_logger, 'new_logger' );
-#ok( $logger->error('test'), "error('test')" );
-#for (1..100) { sleep 1; $logger->error('test') }
+ok( my $logger= Fluent::LibFluentBit->new_logger, 'new_logger' );
+for my $level (qw( trace debug info notice warn error )) {
+   ok( $logger->$level($level), $level );
+   sleep .2;
+}
+for my $level (qw( trace debug info notice warn error )) {
+   ok( $logger->$level({ message => "testing $level", some_data => [ rand ] }), $level );
+   sleep .2;
+}
+
+
 ok( $flb->stop >= 0, 'flb_stop' );
 undef $flb;
 

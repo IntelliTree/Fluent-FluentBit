@@ -2,7 +2,7 @@ package Fluent::LibFluentBit;
 use strict;
 use warnings;
 use Carp;
-use JSON::MaybeXS;
+use Scalar::Util;
 use Exporter;
 
 # VERSION
@@ -88,9 +88,30 @@ Arguments to new get passed to L</configure>.
 require XSLoader;
 XSLoader::load('Fluent::LibFluentBit', $Fluent::LibFluentBit::VERSION);
 
+our @EXPORT_OK= qw(
+  flb_create flb_service_set flb_input flb_input_set flb_filter flb_filter_set
+  flb_output flb_output_set flb_start flb_stop flb_destroy
+  flb_lib_push flb_lib_config_file
+  FLB_LIB_ERROR FLB_LIB_NONE FLB_LIB_OK FLB_LIB_NO_CONFIG_MAP
+);
+
+sub import {
+   # handle the -config option.
+   for (my $i= 1; $i < @_; $i++) {
+      if ($_[$i] eq '-config') {
+         ref $_[$i+1] eq 'HASH'
+            or croak "-config must be followed by a hashref";
+         __PACKAGE__->default_instance->configure($_[$i+1]);
+         splice(@_, $i, 2);
+         --$i;
+      }
+   }
+   goto \&Exporter::import;
+}
+
 our ( %instances, $default_instance );
 sub default_instance {
-   $default_instance //= Fluent::LibFluentBit->new(@_);
+   $default_instance //= Fluent::LibFluentBit->new();
 }
 # Before program exit, try to cleanly flush all messages
 sub END {
@@ -104,7 +125,7 @@ sub new {
    my $class= shift;
    my $self= Fluent::LibFluentBit::flb_create();
    bless $self, $class if $class ne 'Fluent::LibFluentBit';
-   weaken( $instances{0+$self}= $self );
+   Scalar::Util::weaken( $instances{0+$self}= $self );
    $self->configure((@_ == 1 && ref $_[0] eq 'HASH')? %{$_[0]} : @_);
 }
 
@@ -113,7 +134,7 @@ sub DESTROY {
    my $self= shift;
    delete $instances{0+$self};
    $self->stop;
-   # XS calls flb_destroy
+   # XS calls flb_destroy when the hash goes out of scope
 }
 
 sub _ctx {
@@ -229,6 +250,7 @@ sub add_input {
    $config->{context}= $self;
    my $obj= Fluent::LibFluentBit::Input->new($config);
    push @{ $self->{inputs} }, $obj;
+   $self->{lib_input} //= $obj if $obj->name eq 'lib';
    $obj;
 }
 
@@ -259,7 +281,7 @@ This is a no-op if the engine is already started.  It can die if flb_start retur
 
 =head2 stop
 
-Stop the flient-bit engine, if it is started.  This relies on the L</started> attribute and
+Stop the fluent-bit engine, if it is started.  This relies on the L</started> attribute and
 does not consult the library.  (maybe that's a bug?)
 
 =cut
@@ -291,12 +313,22 @@ the logger gets used, and which triggers a call to L</start>.
 =cut
 
 sub new_logger {
-   my $self= shift;
+   my $self= _ctx(shift);
+   if (!defined $self->{lib_input}) {
+      croak "Can't create 'lib' input after engine is started" if $self->started;
+      $self->{lib_input}= $self->add_input('lib');
+   }
    require Fluent::LibFluentBit::Logger;
-   $self->start unless $self->{started};
-   Fluent::LibFluentBit::Logger->new(context => $self, @_);
+   Fluent::LibFluentBit::Logger->new(
+      context => $self,
+      input_id => $self->{lib_input}->id,
+      (@_ == 1 && ref $_[0] eq 'HASH'? %{$_[0]} : @_)
+   );
 }
 
+require Fluent::LibFluentBit::Input;
+require Fluent::LibFluentBit::Filter;
+require Fluent::LibFluentBit::Output;
 1;
 __END__
 
