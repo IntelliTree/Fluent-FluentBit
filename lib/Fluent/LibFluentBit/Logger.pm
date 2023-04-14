@@ -14,10 +14,25 @@ sub new {
    bless \%attrs, $class;
 }
 
+sub include_caller {
+   $_[0]{include_caller}= $_[1] if @_ > 1;
+   $_[0]{include_caller}
+}
+
 sub _log_data {
    my ($self, $data, $level)= @_;
-   $data= { message => $data } unless ref $data eq 'HASH';
+   $data= ref $data eq 'HASH'? { %$data } : { message => $data };
    $data->{status}= $level;
+   if ($self->{include_caller}) {
+      my ($i, $pkgname, $file, $line, $callname)= (1);
+      while (($pkgname, $file, $line)= caller($i++) and substr($pkgname,0,5) eq 'Log::') {}
+      # up one more level tells us the name of the function it happened in.
+      # ...but skip functions named '(eval)'
+      while (($callname)= (caller($i++))[3] and $callname eq '(eval)') {}
+      $data->{caller}= $callname // $pkgname;
+      $data->{file}= $file;
+      $data->{line}= $line;
+   }
    my $code= $self->{context}->flb_lib_push($self->{input_id}, encode_json([ time, $data ]));
    $code >= 0 or croak "flb_lib_push failed: $code";
    return $self;
