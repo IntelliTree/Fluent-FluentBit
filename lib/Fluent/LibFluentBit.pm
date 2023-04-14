@@ -3,30 +3,179 @@ use strict;
 use warnings;
 use Carp;
 use JSON::MaybeXS;
+use Exporter;
 
 # VERSION
 # ABSTRACT: Perl interface to libfluent-bit.so
 
+=head1 SYNOPSIS
+
+  use Fluent::LibFluentBit -config => {
+    log_level => 'trace',
+    outputs => [{
+      name => 'datadog',
+      match => '*',
+      host => "http-intake.logs.datadoghq.com",
+      tls => 'on',
+      compress => 'gzip',
+      apikey => $ENV{DATADOG_API_KEY},
+      dd_service => 'example',
+      dd_source => 'perl-fluentbit',
+    }]
+  );
+  my $logger= Fluent::LibFluentBit->new_logger;
+  $logger->info("Message");
+  $logger->error({ log => "Message", key1 => "value1", key2 => "balue2" });
+
+=head1 DESCRIPTION
+
+Fluent is a software tool that collects log data from a wide variety of sources and delivers
+them to a wide variety of destinations (with 1000+ plugins that cover just about any conceivable
+source or destination) and buffers them in a server "fluentd" to act as a central point of
+configuration and to smooth over any network interruptions.
+
+Fluent-Bit is a smaller single-process implementation of the same idea.  It is written in C,
+for performance and low overhead, and available as both a standalone program and a C library.
+It supports fewer plugins (but still an impressive 100+) but does not need an intermediate
+server for the buffering.  When used as a C library, the main application gets to write log
+data un-blocked while a background thread in libfluent-bit does the work of writing to external
+sources.
+
+To integrate fluent-bit with a Perl application, you have several options, including:
+
+=over
+
+=item *
+
+Write to log files, then run flient-bit as a log processor that monitors for new lines in the
+files.
+
+=item *
+
+Pipe the perl process output into stdin of fluent-bit, either directly or via stdout of a
+container.
+
+=item *
+
+Use this module to feed data directly into fluent-bit within the same process (but separate
+thread)
+
+=back
+
+There are a time and a place for each of these options.  The main use case for this module
+(as I see it) is when it would be inconvenient to direct the output of the process into
+a pipe, and where you trust the perl script to do its logging via an API and not accidentally
+via stdout (which wouldn't be seen by libfluent-bit).
+
+=head1 CONSTRUCTOR
+
+=head1 default_instance
+
+You probably only want one instance of fluent-bit running per program, so all the methods of
+this package can be called as class methods and they will operate on this default instance.
+The instance gets created the first time you call C<default_instance> or if you pass C<-config>
+to the 'use' line.
+
+=head1 new
+
+This creates a non-default instance of the library.  You probably don't need this; see
+L</default_instance> above.
+
+Arguments to new get passed to L</configure>.
+
+=cut
+
 require XSLoader;
 XSLoader::load('Fluent::LibFluentBit', $Fluent::LibFluentBit::VERSION);
 
-my $default_instance;
+our ( %instances, $default_instance );
 sub default_instance {
-   $default_instance //= Fluent::LibFluentBit->new;
+   $default_instance //= Fluent::LibFluentBit->new(@_);
+}
+# Before program exit, try to cleanly flush all messages
+sub END {
+   defined $_ && $_->{started} && $_->stop
+      for values %instances;
+   %instances= ();
 }
 
+# constructor registers the instance
 sub new {
    my $class= shift;
    my $self= Fluent::LibFluentBit::flb_create();
-   %$self= (@_ == 1 && ref $_[0] eq 'HASH')? %{$_[0]} : @_;
-   my $inputs= delete $self->{inputs};
-   my $filters= delete $self->{filters};
-   my $outputs= delete $self->{outputs};
-   for (keys %$self) {
-      $self->flb_service_set($_, $self->{$_}) >= 0
-         or carp "Invalid fluent-bit service attribute '$_'";
+   bless $self, $class if $class ne 'Fluent::LibFluentBit';
+   weaken( $instances{0+$self}= $self );
+   $self->configure((@_ == 1 && ref $_[0] eq 'HASH')? %{$_[0]} : @_);
+}
+
+# destructor flushes cached messages and unregisters the instance
+sub DESTROY {
+   my $self= shift;
+   delete $instances{0+$self};
+   $self->stop;
+   # XS calls flb_destroy
+}
+
+sub _ctx {
+   ref $_[0]? $_[0] : $_[0]->default_instance
+}
+
+=head1 ATTRIBUTES
+
+All attributes are read-only and should be modified using L</configure>
+
+=over
+
+=item inputs
+
+=item outputs
+
+=item filters
+
+=item started
+
+=back
+
+=cut
+
+sub inputs { _ctx(shift)->{inputs} }
+sub filters { _ctx(shift)->{filters} }
+sub outputs { _ctx(shift)->{outputs} }
+sub started { !!_ctx(shift)->{started} }
+
+=head1 METHODS
+
+All methods may be called on the class, in which case they will use L</default_instance>.
+
+=head2 configure
+
+  $flb->configure( $key => $value, ... );
+
+This accepts any attribute (case-insensitive) that you could write in the [SERVICE] section
+of the fluent-bit config file.  Invalid attributes generate warnings instead of exceptions.
+
+You may also pass a list of C<< inputs => [...] >>, C<< outputs => [...] >>, and
+C<< filters => [...] >> which will generate calls to L</add_input>, L</add_output>, and
+L</add_filter> respectively.
+
+B<< The first library instance you create becomes the >> L</default_instance>.
+
+=cut
+
+sub configure {
+   my $self= _ctx(shift);
+   my %conf= @_ == 1 && ref $_[0] eq 'HASH'? %{$_[0]} : @_;
+
+   my $inputs= delete $conf{inputs};
+   my $filters= delete $conf{filters};
+   my $outputs= delete $conf{outputs};
+   for (keys %conf) {
+      if ($self->flb_service_set($_, $conf{$_}) >= 0) {
+         $self->{$_}= $conf{$_};
+      } else {
+         carp "Invalid fluent-bit context attribute '$_' = '$conf{$_}'";
+      }
    }
-   $self->{started}= !1;
    if ($inputs) {
       $self->add_input($_) for @$inputs;
    }
@@ -38,6 +187,28 @@ sub new {
    }
    return $self;
 }
+
+=head2 add_input
+
+  $inp= $flb->add_input($type => \%config);
+  $inp= $flb->add_input({ name => $type, %config... });
+
+Create and configure a new input.  You probably don't need this if you are only using the
+loggers from this library as input.  C<%config> Attributes are not case-sensitive, and are
+the same keys and values you would write in the [INPUT] sections of the config file.
+
+Returns an instance of L<Fluent::LibFluentBit::Input> which is also added to the L</inputs>
+attribute.
+
+=head2 add_filter
+
+Same as add_input, for filters.
+
+=head2 add_output
+
+Same as add_input, for outputs.
+
+=cut
 
 sub _collect_subobject_config {
    my %cfg;
@@ -52,9 +223,8 @@ sub _collect_subobject_config {
    \%cfg;
 }
 
-sub inputs { $_[0]{inputs} }
 sub add_input {
-   my $self= shift;
+   my $self= _ctx(shift);
    my $config= &_collect_subobject_config;
    $config->{context}= $self;
    my $obj= Fluent::LibFluentBit::Input->new($config);
@@ -62,9 +232,8 @@ sub add_input {
    $obj;
 }
 
-sub filters { $_[0]{filters} }
 sub add_filter {
-   my $self= shift;
+   my $self= _ctx(shift);
    my $config= &_collect_subobject_config;
    $config->{context}= $self;
    my $obj= Fluent::LibFluentBit::Filter->new($config);
@@ -72,9 +241,8 @@ sub add_filter {
    $obj;
 }
 
-sub outputs { $_[0]{outputs} }
 sub add_output {
-   my $self= shift;
+   my $self= _ctx(shift);
    my $config= &_collect_subobject_config;
    $config->{context}= $self;
    my $obj= Fluent::LibFluentBit::Output->new($config);
@@ -82,29 +250,45 @@ sub add_output {
    $obj;
 }
 
-sub started { $_[0]{started} }
+=head2 start
+
+Start the fluent-bit engine.  This should probably only occur after all configurations of
+inputs and filters and outputs.
+
+This is a no-op if the engine is already started.  It can die if flb_start returns an error.
+
+=head2 stop
+
+Stop the flient-bit engine, if it is started.  This relies on the L</started> attribute and
+does not consult the library.  (maybe that's a bug?)
+
+=cut
 
 sub start {
-   my $self= shift;
+   my $self= _ctx(shift);
    unless ($self->{started}) {
-      $self->flb_start;
+      my $ret= $self->flb_start;
+      $ret >= 0 or croak "flb_start failed: $ret";
       $self->{started}= 1;
    }
 }
 
 sub stop {
-   my $self= shift;
+   my $self= _ctx(shift);
    if ($self->{started}) {
-      $self->flb_stop;
+      my $ret= $self->flb_stop;
+      $ret >= 0 or croak "flb_stop failed: $ret";
       $self->{started}= 0;
    }
 }
 
-sub DESTROY {
-   my $self= shift;
-   $self->stop;
-   $self->flb_destroy;
-}
+=head2 new_logger
+
+Return a new instance of L<Fluent::LibFluentBit::Logger> which feeds messages to the 'lib'
+input of the library.  Currently these all use the same input handle, creted the first time
+the logger gets used, and which triggers a call to L</start>.
+
+=cut
 
 sub new_logger {
    my $self= shift;
@@ -113,8 +297,53 @@ sub new_logger {
    Fluent::LibFluentBit::Logger->new(context => $self, @_);
 }
 
-END {
-   undef $default_instance;
-}
-
 1;
+__END__
+
+=head1 EXPORTS
+
+=head1 libfluent-bit API
+
+=over
+
+=item flb_create
+
+=item flb_service_set
+
+=item flb_input
+
+=item flb_input_set
+
+=item flb_filter
+
+=item flb_filter_set
+
+=item flb_output
+
+=item flb_output_set
+
+=item flb_start
+
+=item flb_stop
+
+=item flb_destroy
+
+=item flb_lib_push
+
+=item flb_lib_config_file
+
+=back
+
+=head1 Constants
+
+=over
+
+=item FLB_LIB_ERROR
+
+=item FLB_LIB_NONE
+
+=item FLB_LIB_OK
+
+=item FLB_LIB_NO_CONFIG_MAP
+
+=back
