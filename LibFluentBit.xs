@@ -15,7 +15,8 @@ static SV *newSVivpv(IV ival, const char *pval) {
 }
 #endif
 
-#define TRACE warn
+//#define TRACE warn
+#define TRACE(x...) do { } while (0)
 
 MODULE = Fluent::LibFluentBit              PACKAGE = Fluent::LibFluentBit
 
@@ -176,7 +177,7 @@ flb_lib_push(ctx, in_ffd, data_sv, len_sv=NULL)
       size_t len;
       const char *data= SvPV(data_sv, len);
    CODE:
-      warn("flb_lib_push %p %d %p %d data_sv=%p", ctx, in_ffd, data, len, data_sv);
+      TRACE("flb_lib_push %p %d %p %d data_sv=%p", ctx, in_ffd, data, len, data_sv);
       // Use the shorter of the user-supplied length or the actual string length
       if (len_sv && SvIV(len_sv) < len)
          len= SvIV(len_sv);
