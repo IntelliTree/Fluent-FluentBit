@@ -1,11 +1,11 @@
 package Fluent::LibFluentBit;
+# VERSION
 use strict;
 use warnings;
 use Carp;
 use Scalar::Util;
 use Exporter;
 
-# VERSION
 # ABSTRACT: Perl interface to libfluent-bit.so
 
 =head1 SYNOPSIS
