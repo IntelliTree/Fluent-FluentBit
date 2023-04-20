@@ -2,6 +2,7 @@ our %PREREQ_PM;
 BEGIN {
 	%PREREQ_PM= (
 		'ExtUtils::Depends'       => '0.405',
+		'Alien::FluentBit'        => '0.01',
 	);
 	
 	# If the prereqs for this script are missing,
@@ -21,8 +22,8 @@ BEGIN {
 
 my $dep= ExtUtils::Depends->new('Fluent::LibFluentBit');
 
-#$dep->set_inc('-I/opt/fluent-bit/include');
-$dep->set_libs('-L/lib/fluent-bit -lfluent-bit');
+$dep->set_inc(Alien::FluentBit->cflags);
+$dep->set_libs(Alien::FluentBit->libs);
 $dep->add_c('PerlFluentBit.c');
 $dep->add_xs('LibFluentBit.xs');
 $dep->add_pm(map { my $n= $_; $n =~ s/^lib/\$(INST_LIB)/; $_ => $n } <lib/*/*.pm>, <lib/*/*/*.pm>);
