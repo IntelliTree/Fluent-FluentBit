@@ -1,4 +1,4 @@
-#include <fluent-bit.h>
+#include <fluent-bit-minimal.h>
 
 extern MGVTBL PerlFluentBit_ctx_mg_vtbl;
 extern void* PerlFluentBit_get_mg(SV *obj, MGVTBL *tbl);
