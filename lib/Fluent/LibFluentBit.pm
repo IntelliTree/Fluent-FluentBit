@@ -38,8 +38,8 @@ Fluent-Bit is a smaller single-process implementation of the same idea.  It is w
 for performance and low overhead, and available as both a standalone program and a C library.
 It supports fewer plugins (but still an impressive 100+) but does not need an intermediate
 server for the buffering.  When used as a C library, the main application gets to write log
-data un-blocked while a background thread in libfluent-bit does the work of writing to external
-sources.
+data un-blocked while a background thread in libfluent-bit does the work of writing to remote
+destinations.
 
 To integrate fluent-bit with a Perl application, you have several options, including:
 
@@ -47,13 +47,12 @@ To integrate fluent-bit with a Perl application, you have several options, inclu
 
 =item *
 
-Write to log files, then run flient-bit as a log processor that monitors for new lines in the
+Write to log files, then run fluent-bit as a log processor that watches for new lines in the
 files.
 
 =item *
 
-Pipe the perl process output into stdin of fluent-bit, either directly or via stdout of a
-container.
+Pipe the perl process output into stdin of fluent-bit, as either JSON or parsed plaintext.
 
 =item *
 
@@ -69,14 +68,14 @@ via stdout (which wouldn't be seen by libfluent-bit).
 
 =head1 CONSTRUCTOR
 
-=head1 default_instance
+=head2 default_instance
 
 You probably only want one instance of fluent-bit running per program, so all the methods of
 this package can be called as class methods and they will operate on this default instance.
 The instance gets created the first time you call C<default_instance> or if you pass C<-config>
 to the 'use' line.
 
-=head1 new
+=head2 new
 
 This creates a non-default instance of the library.  You probably don't need this; see
 L</default_instance> above.
@@ -149,11 +148,19 @@ All attributes are read-only and should be modified using L</configure>
 
 =item inputs
 
+Arrayref of L<Fluent::LibFluentBit::Input>.
+
 =item outputs
+
+Arrayref of L<Fluent::LibFluentBit::Output>.
 
 =item filters
 
+Arrayref of L<Fluent::LibFluentBit::Filter>.
+
 =item started
+
+Boolean, whether the background thread is running.
 
 =back
 
@@ -178,8 +185,6 @@ of the fluent-bit config file.  Invalid attributes generate warnings instead of 
 You may also pass a list of C<< inputs => [...] >>, C<< outputs => [...] >>, and
 C<< filters => [...] >> which will generate calls to L</add_input>, L</add_output>, and
 L</add_filter> respectively.
-
-B<< The first library instance you create becomes the >> L</default_instance>.
 
 =cut
 
@@ -334,7 +339,9 @@ __END__
 
 =head1 EXPORTS
 
-=head1 libfluent-bit API
+The following can be exported into your namespace for a more C-like experience:
+
+=head2 libfluent-bit API
 
 =over
 
@@ -366,7 +373,7 @@ __END__
 
 =back
 
-=head1 Constants
+=head2 Constants
 
 =over
 

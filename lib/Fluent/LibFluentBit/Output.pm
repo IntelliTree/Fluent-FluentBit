@@ -13,7 +13,7 @@ use parent 'Fluent::LibFluentBit::Component';
 
 See L<Fluent::LibFluentBit::Component> for API.
 
-See L<https://docs.fluentbit.io/manual/pipeline/outputs|fluent-bit documentation>
+See L<fluent-bit documentation|https://docs.fluentbit.io/manual/pipeline/outputs>
 for the different types and attributes for outputs.
 
 =cut
