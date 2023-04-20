@@ -1,9 +1,83 @@
 package Fluent::LibFluentBit::Logger;
+# VERSION
 use strict;
 use warnings;
 use Carp;
 use Time::HiRes 'time';
 use JSON::MaybeXS;
+
+# ABSTRACT: Perl-style logger object that logs to the 'lib' input of fluent-bit
+
+=head1 SYNOPSIS
+
+  my $logger= Fluent::LibFluentBit->new_logger;
+  $logger->trace(...);
+  $logger->debug(...);
+  $logger->info(...);
+  $logger->warn(...);
+  $logger->notice(...);
+  $logger->error(...);
+
+=head1 DESCRIPTION
+
+The fluent-bit library allows an input of type "lib" which is written directly from code
+in the same process.  (this is the primary point of the library)
+
+This logger object writes to that input, using a key of C<"message"> for the text of the
+log message, and a key of C<"status"> for the log-level.
+
+=head1 ATTRIBUTES
+
+=head2 context
+
+An instance of Fluent::LibFluentBit.  Read-only.  Required.
+
+=head2 input_id
+
+The ID of the 'lib' input for libfluent-bit, which these messages are written into.
+Read-only.  Required.
+
+=head2 include_caller
+
+Boolean.  If set to true, this will inspect the caller on each log message and include that
+in the logged data as keys C<'file'>, C<'line'>, and C<'caller'> (package or function name
+where the call was made).
+
+=cut
+
+sub include_caller {
+   $_[0]{include_caller}= $_[1] if @_ > 1;
+   $_[0]{include_caller}
+}
+
+=head1 METHODS
+
+=head2 Log Delivery Methods
+
+  $logger->info("message");
+  $logger->info(message => "message");
+  $logger->info({ message => "message" });
+
+Each method allows a single scalar, or hashref, or list of key/value pairs.
+A single scalar becomes the value for the key 'message'.  They all return $self.
+
+=over
+
+=item trace
+
+=item debug
+
+=item info
+
+=item warn
+
+=item notice
+
+=item error
+
+=back
+
+=cut
 
 sub new {
    my $class= shift;
@@ -12,11 +86,6 @@ sub new {
    defined $attrs{input_id} or croak "Missing required attribute 'input_id'";
    $attrs{context}->start unless $attrs{context}->started;
    bless \%attrs, $class;
-}
-
-sub include_caller {
-   $_[0]{include_caller}= $_[1] if @_ > 1;
-   $_[0]{include_caller}
 }
 
 sub _log_data {
