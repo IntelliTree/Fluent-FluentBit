@@ -1,26 +1,22 @@
 INSTALLATION
 ------------
 
-First, you need libfluent-bit.so
+First, you need libfluent-bit.so   Alien::FluentBit helps you with this by building
+one from source.  The binary dist from github.com/fluent/fluent-bit currently does
+not work with perl without adding the library to LD_PRELOAD which is not a great
+solution.
 
-For debian-based containers:
-
-    curl https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh | sh
-
-Then, put the library in LD_PRELOAD.  (this is an unfortunate bug when
-libfluent-bit is combined with Perl, and needs some deep C toolchain
-debugging to resolve the problem)
-
-    export LD_PRELOAD=/lib/fluent-bit/libfluent-bit.so
+    apt-get install cmake flex bison m4   # not required, but speeds things up
+    cpanm Alien::FluentBit
 
 Now you can install the module:
 
-    cpanm Fluent-LibFluentBit-0.01.tar.gz
+    cpanm Fluent-LibFluentBit-0.02.tar.gz
 
 or:
 
-    tar -xf Fluent-LibFluentBit-0.01.tar.gz
-    cd Fluent-LibFluentBit-0.01
+    tar -xf Fluent-LibFluentBit-0.02.tar.gz
+    cd Fluent-LibFluentBit-0.02
     perl Makefile.PL
     make
     make test
@@ -40,5 +36,5 @@ To build and run single unit tests, use the 'dtest' script:
 
 To build and install a trial version, use
 
-    V=0.01_01 dzil build
-    cpanm Fluent-LibFluentBit-0.01_01.tar.gz
+    V=0.02_01 dzil build
+    cpanm Fluent-LibFluentBit-0.02_01.tar.gz
