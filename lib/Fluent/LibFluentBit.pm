@@ -25,7 +25,7 @@ use Exporter;
   );
   my $logger= Fluent::LibFluentBit->new_logger;
   $logger->info("Message");
-  $logger->error({ log => "Message", key1 => "value1", key2 => "balue2" });
+  $logger->error({ log => "Message", key1 => "value1", key2 => "value2" });
 
 =head1 DESCRIPTION
 
